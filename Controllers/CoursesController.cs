@@ -1,38 +1,44 @@
 using Microsoft.AspNetCore.Mvc;
-
+using Tms.Api.Dtos;
+using Tms.Api.Services;
+namespace Tms.Api.Controllers;
 [ApiController]
 [Route("api/courses")]
 public class CoursesController(ICourseService courseService) : ControllerBase
 {
-    // GET/api/courses returns all course records
-    [HttpGet]
-    public async Task<IActionResult> GetAll()
+[HttpGet("{id:int}", Name = nameof(GetCourseById))]
+public async Task<IActionResult> GetCourseById(int id, CancellationToken ct)
+{
+var course = await courseService.GetByIdAsync(id, ct);
+return course is not null ? Ok(course) : NotFound();
+}
+[HttpPost]
+[HttpPost]
+public async Task<IActionResult> CreateCourse(CreateCourseRequest request, CancellationToken ct)
+{
+    // TODO 1: Call courseService.CodeExistsAsync(request.Code, ct).
+    // If it returns true, return Conflict(new ProblemDetails { ... }) with:
+    // Title = "Course code already exists"
+    // Detail = $"A course with code '{request.Code}' is already registered."
+    // Status = StatusCodes.Status409Conflict
+
+    if (await courseService.CodeExistsAsync(request.Code, ct))
     {
-        var courses = await courseService.GetAllAsync();
-        return Ok(courses);
+        return Conflict(new ProblemDetails
+        {
+            Title = "Course code already exists",
+            Detail = $"A course with code '{request.Code}' is already registered.",
+            Status = StatusCodes.Status409Conflict
+        });
     }
 
-    // GET/api/courses/{id} returns one or 404
-    [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(string id)
-    {
-        var record = await courseService.GetByIdAsync(id);
-        return record is not null ? Ok(record) : NotFound();
-    }
+    // You do not need a try/catch; the framework's ProblemDetails middleware
+    // handles unhandled exceptions.
+    var result = await courseService.CreateAsync(request, ct);
 
-    // POST /api/courses creates and returns 201 with Location header
-    [HttpPost]
-    public async Task<IActionResult> Create([FromBody] CreateCourseRequest request)
-    {
-        var record = await courseService.CreateAsync(request.CourseCode, request.Name, request.Description);
-        return CreatedAtAction(nameof(GetById), new { id = record?.Id }, record);
-    }
-
-    // DELETE /api/courses/{id} returns 204 or 404
-    [HttpDelete("{id}")]
-    public async Task<IActionResult> Delete(string id)
-    {
-        var deleted = await courseService.DeleteAsync(id);
-        return deleted ? NoContent() : NotFound();
-    }
+    return CreatedAtAction(
+        nameof(GetCourseById),
+        new { id = result.Id },
+        result);
+}
 }
