@@ -1,60 +1,35 @@
-using System.Security.Cryptography.X509Certificates;
-public interface ICourseService
+using Microsoft.EntityFrameworkCore;
+using Tms.Api.Dtos;
+using TmsApi.Data;
+using TmsApi.Entities;
+
+namespace Tms.Api.Services;
+
+public class CourseService(TmsDbContext context, ILogger<CourseService> logger) : ICourseService
 {
-    Task<CourseRecord?> CreateAsync(string courseCode, string name, string description);
-    Task<CourseRecord?> GetByIdAsync(string id);
-    Task<IReadOnlyList<CourseRecord>> GetAllAsync();
-    Task<bool> DeleteAsync(string id);
+    public Task<CourseResponseDto?> GetByIdAsync(int id, CancellationToken
+ct) =>
+context.Courses
+.AsNoTracking()
+.Where(c => c.Id == id)
+.Select(c => new CourseResponseDto(
+c.Id, c.Code, c.Title, c.MaxCapacity, c.Enrollments.Count))
+.FirstOrDefaultAsync(ct);
+
+    public async Task<CourseResponseDto> CreateAsync(CreateCourseRequest request, CancellationToken ct)
+{
+var course = new Course
+{
+Code = request.Code,
+Title = request.Title,
+MaxCapacity = request.MaxCapacity
+};
+context.Courses.Add(course);
+await context.SaveChangesAsync(ct);
+logger.LogInformation("Created course {CourseId} ({Code})", course.
+Id, course.Code);
+return (await GetByIdAsync(course.Id, ct))!;
 }
-
-public class CourseService : ICourseService
-{
-    private readonly Dictionary<string, CourseRecord> _courseStore = new();
-    private readonly ILogger<CourseService> _logger;
-
-    public CourseService(ILogger<CourseService> logger)
-    {
-        this._logger = logger;
-        // --- seed some data ---
-        var c1 = new CourseRecord("1", "c1", "Introduction to Programming", "Learn the basics of programming using C#.");
-        var c2 = new CourseRecord("2", "c2", "Data Structures", "Explore common data structures and their applications.");
-        var c3 = new CourseRecord("3", "c3", "Web Development", "Build modern web applications using ASP.NET Core.");
-        var c4 = new CourseRecord("4", "c4", "Database Systems", "Understand relational databases and SQL.");
-
-        _courseStore[c1.Id] = c1;
-        _courseStore[c2.Id] = c2;
-        _courseStore[c3.Id] = c3;
-        _courseStore[c4.Id] = c4;
-    }
-    public Task<CourseRecord?> CreateAsync(string courseCode, string name, string description)
-    {
-        var id = Guid.NewGuid().ToString("N")[..8];
-        var record = new CourseRecord(id, courseCode, name, description);
-        _courseStore[id] = record;
-        _logger.LogInformation("Created course {CourseCode} record {CourseId}", courseCode, id);
-        return Task.FromResult<CourseRecord?>(record);
-    }
-    public Task<CourseRecord?> GetByIdAsync(string id)
-    {
-        _courseStore.TryGetValue(id, out var record);
-        if (record is null)
-        {
-            _logger.LogWarning("Course {CourseId} not found", id);
-        }
-        return Task.FromResult(record);
-    }
-    public Task<IReadOnlyList<CourseRecord>> GetAllAsync()
-    {
-        IReadOnlyList<CourseRecord> all = _courseStore.Values.ToList();
-        return Task.FromResult(all);
-    }
-    public Task<bool> DeleteAsync(string id)
-    {
-        var removed = _courseStore.Remove(id);
-        if (removed)
-            _logger.LogInformation("Deleted course {CourseId}", id);
-        else
-            _logger.LogWarning("Delete failed course {CourseId} not found", id);
-        return Task.FromResult(removed);
-    }
+public Task<bool> CodeExistsAsync(string code, CancellationToken ct) =>
+context.Courses.AsNoTracking().AnyAsync(c => c.Code == code, ct);
 }

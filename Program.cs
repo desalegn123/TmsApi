@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using Tms.Api.Services;
 using TmsApi.Data;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -12,9 +13,8 @@ builder.Services
     TrainingAuthHandler>("Training", null);
 builder.Services.AddAuthorization();
 builder.Services.AddSingleton<EnrollmentWorker>();
-builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 builder.Services.AddScoped<IStudentService, StudentService>();
-builder.Services.AddScoped<ICourseService, CourseService>();
+
 builder.Services
     .AddOptions<PaymentOptions>()
     .BindConfiguration("Payments")
@@ -24,6 +24,8 @@ builder.Services.AddControllers();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<TmsDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase")));
+builder.Services.AddScoped<ICourseService, CourseService>();
+builder.Services.AddScoped<IEnrollmentService, EnrollmentService>();
 
 builder.Host.UseDefaultServiceProvider(options =>
 {
@@ -53,7 +55,7 @@ else if (app.Environment.IsProduction())
 
 app.MapGet("/api/error", () =>
 {
-    throw new TmsDatabaseException("Simulated database failure for ProblemDetails testing");
+    throw new Exception("Simulated database failure for ProblemDetails testing");
 });
 
 app.MapGet("/api/assessments/results", () => Results.Ok(new
@@ -68,5 +70,11 @@ app.MapGet("/api/enrollments/worker-smoke", (EnrollmentWorker worker) =>
     worker.ProcessBatch();
     return Results.Ok("processed");
 });
+if (app.Environment.IsDevelopment())
+{
+using var scope = app.Services.CreateScope();
+var context = scope.ServiceProvider.GetRequiredService<TmsDbContext>();
+await TmsApi.Persistence.DataSeeder.SeedAsync(context);
+}
 
 app.Run();

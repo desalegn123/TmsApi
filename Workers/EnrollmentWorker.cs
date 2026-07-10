@@ -8,6 +8,8 @@
 // }
 
 // Inside EnrollmentWorker.cs...
+using Tms.Api.Services;
+
 public class EnrollmentWorker(IServiceScopeFactory scopeFactory)
 {
     public void ProcessBatch()
