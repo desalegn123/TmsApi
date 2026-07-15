@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.OpenApi;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using Tms.Api.Filters;
 using Tms.Api.Services;
 using TmsApi.Data;
 
@@ -20,7 +21,10 @@ builder.Services
     .BindConfiguration("Payments")
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<AuditLogFilter>();
+});
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddDbContext<TmsDbContext>(options => options.UseNpgsql(builder.Configuration.GetConnectionString("TmsDatabase")));
