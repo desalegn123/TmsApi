@@ -95,4 +95,14 @@ public class EnrollmentService(
     {
         throw new NotImplementedException();
     }
+
+    Task<IReadOnlyList<EnrollmentResponseDto>> IEnrollmentService.GetByCourseAsync(int courseId, CancellationToken ct)
+    {
+        throw new NotImplementedException();
+    }
+
+    Task<IReadOnlyList<EnrollmentResponseDto>> IEnrollmentService.GetAllAsync(CancellationToken ct)
+    {
+        throw new NotImplementedException();
+    }
 }
