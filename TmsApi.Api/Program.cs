@@ -29,6 +29,15 @@ using TmsApi.Api.Hubs;
 using TmsApi.Application.Notifications;
 using TmsApi.Api.Notifications;
 using Microsoft.AspNetCore.Antiforgery;
+using TmsApi.Infrastructure.Identity;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using Tms.Api.Authorization;
+using Microsoft.AspNetCore.Authorization;
+using TmsApi.Api.Authorization;
+
 var builder = WebApplication.CreateBuilder(args);
 
 
@@ -69,6 +78,32 @@ builder.Services.AddControllers(options =>
     options.Filters.Add<AuditLogFilter>();
 });
 builder.Services.AddSignalR();
+builder.Services.AddScoped<TokenService>();
+builder.Services.AddAuthentication(options =>
+{
+options.DefaultAuthenticateScheme =
+JwtBearerDefaults.AuthenticationScheme;
+options.DefaultChallengeScheme =
+JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+options.TokenValidationParameters = new TokenValidationParameters
+{
+ValidateIssuer = true,
+ValidateAudience = true,
+ValidateLifetime = true,
+ValidateIssuerSigningKey = true,
+ValidIssuer = builder.Configuration["Jwt:Issuer"],
+ValidAudience = builder.Configuration["Jwt:Audience"],
+IssuerSigningKey = new SymmetricSecurityKey(
+Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+};
+});
+builder.Services.AddAuthorizationBuilder()
+.AddPolicy("CanEditCourse", policy =>
+policy.Requirements.Add(new CourseInstructorRequirement()));
+builder.Services.AddSingleton<IAuthorizationHandler, CourseInstructorHandler>();
 
 // =============================
 // OPEN API / SCALAR
@@ -79,7 +114,15 @@ builder.Services.AddOpenApi("v1", options =>
     options.ShouldInclude = description =>
         description.GroupName == "v1";
 });
-
+builder.Services.AddRateLimiter(options =>
+{
+options.AddFixedWindowLimiter("AuthLimiter", opt =>
+{
+opt.PermitLimit = 5;
+opt.Window = TimeSpan.FromMinutes(1);
+opt.QueueLimit = 0;
+});
+});
 
 builder.Services.AddOpenApi("v2", options =>
 {
@@ -113,6 +156,20 @@ builder.Services.AddMediatR(cfg =>
     cfg.RegisterServicesFromAssembly(
         typeof(GetCoursesQueryHandler).Assembly);
 });
+builder.Services.AddIdentityCore<TmsUser>(options =>
+{
+// Enterprise Password Policy
+options.Password.RequiredLength = 12;
+options.Password.RequireUppercase = true;
+options.Password.RequireDigit = true;
+options.Password.RequireNonAlphanumeric = true;
+// Brute-Force Lockout Protection
+options.Lockout.MaxFailedAccessAttempts = 5;
+options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+options.Lockout.AllowedForNewUsers = true;
+})
+.AddRoles<IdentityRole>()
+.AddEntityFrameworkStores<TmsDbContext>();
 
 
 builder.Services.AddMediatR(cfg =>
@@ -427,7 +484,14 @@ builder.Services.AddCors(options =>
 // =============================
 
 var app = builder.Build();
-
+app.Use(async (context, next) =>
+{
+context.Response.Headers.Append("X-Content-Type-Options","nosniff");
+context.Response.Headers.Append("X-Frame-Options", "DENY");
+context.Response.Headers.Append("Referrer-Policy", "strict-originwhen-cross-origin");
+context.Response.Headers.Append("Content-Security-Policy","default-src 'self'; script-src 'self'; style-src 'self''unsafe-inline';");
+await next();
+});
 
 
 // =============================
